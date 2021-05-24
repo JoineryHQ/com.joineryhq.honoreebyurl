@@ -187,6 +187,7 @@ function honoreebyurl_civicrm_buildForm($formName, &$form) {
     if (($htype == 1 || $htype == 2) && $hcid) {
       // Get contact details base on hcid
       $contactDetails = \Civi\Api4\Contact::get()
+        ->setCheckPermissions(FALSE)
         ->addSelect('first_name', 'last_name', 'prefix_id')
         ->addWhere('id', '=', $hcid)
         ->addWhere('is_deleted', '=', FALSE)
