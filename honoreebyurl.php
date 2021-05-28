@@ -177,82 +177,61 @@ function honoreebyurl_civicrm_themes(&$themes) {
  * @link https://docs.civicrm.org/dev/en/latest/hooks/hook_civicrm_buildForm/
  */
 function honoreebyurl_civicrm_buildForm($formName, &$form) {
-  if ($formName == 'CRM_Contribute_Form_Contribution_Main') {
-    // Get the htype and hcid in the URL parameter
-    $htype = CRM_Utils_Array::value('htype', $_GET);
-    $hcid = CRM_Utils_Array::value('hcid', $_GET);
+  if ($formName === 'CRM_Contribute_Form_Contribution_Main' || $formName === 'CRM_Contribute_Form_Contribution_Confirm') {
+    // Get the sctype and sccid in the URL parameter
+    $sctype = CRM_Utils_Request::retrieve('sctype', 'Integer');
+    $sccid = CRM_Utils_Request::retrieve('sccid', 'Integer');
 
-    // If htype is equals to 1 (In Honor of) or 2 (In Memory of)
-    // and hcid is not empty
-    if (($htype == 1 || $htype == 2) && $hcid) {
-      // Get contact details base on hcid
+    // If sctype and $sccid exist in the url param
+    if ($sctype && $sccid) {
+      // Get soft_credit_type base on sctype
+      $softCreditType = \Civi\Api4\OptionValue::get()
+        ->addWhere('option_group_id:name', '=', 'soft_credit_type')
+        ->addWhere('value', '=', $sctype)
+        ->execute()
+        ->first();
+
+      // Get contact details base on sccid
       $contactDetails = \Civi\Api4\Contact::get()
         ->setCheckPermissions(FALSE)
-        ->addSelect('first_name', 'last_name', 'prefix_id')
-        ->addWhere('id', '=', $hcid)
+        ->addSelect('display_name', 'first_name', 'last_name', 'prefix_id')
+        ->addWhere('id', '=', $sccid)
         ->addWhere('is_deleted', '=', FALSE)
         ->execute()
         ->first();
 
-      // If contactDetails exist
-      if ($contactDetails) {
-        // Get contact email using hcid
-        $contactEmail = CRM_Contact_BAO_Contact::getPrimaryEmail($hcid);
-        // Add soft_credit_type_id as htype
-        $defaults['soft_credit_type_id'] = $htype;
-
-        // Get soft_credit_type_id field
-        $softCreditTypeField = $form->getElement('soft_credit_type_id');
-        // Foreach field options
-        foreach ($softCreditTypeField->_elements as $softCreditTypeElementKey => $softCreditTypeElementOption) {
-          // Unset options if its not equals to the htype
-          if ($softCreditTypeElementOption->_attributes['value'] != $htype) {
-            unset($softCreditTypeField->_elements[$softCreditTypeElementKey]);
-          }
-        }
-
-        // Set allowclear as 0 to remove the clear button
-        $softCreditTypeField->_attributes['allowclear'] = 0;
-
-        // Get all fields
-        $fields = $form->_elements;
-        // Foreach fields
-        foreach ($fields as $field) {
-          // If field attributes name exist and attribute name contains 'honor'
-          if ($field->_attributes['name'] && strpos($field->_attributes['name'], 'honor')  !== FALSE) {
-            // If contactEmail exist and field attribute name contains 'email'
-            // (field name would likely be email-1 or email-2 that is why we need this conditional statment)
-            // if didn't contact, check other contactDetails field
-            if (strpos($field->_attributes['name'], 'email') !== FALSE && $contactEmail) {
-              // Set field default value as contactEmail and mark it as readonly
-              $defaults[$field->_attributes['name']] = $contactEmail;
-              $field->_attributes['readonly'] = 1;
-            }
-            else {
-              // Remove honor[] to match it on the contactDetails
-              $fieldName = str_replace('honor[', '', $field->_attributes['name']);
-              $fieldName = str_replace(']', '', $fieldName);
-
-              // contactDetails exist base on fieldName
-              if ($contactDetails[$fieldName]) {
-                // Set field default value and mark it as readonly
-                $defaults[$field->_attributes['name']] = $contactDetails[$fieldName];
-                $field->_attributes['readonly'] = 1;
-
-                // If fieldName is equals to prefix_id and it cannot be set as readonly
-                // disable the field and remove the data option
-                if ($fieldName == 'prefix_id') {
-                  $field->_attributes['disabled'] = 1;
-                  unset($field->_attributes['data-option-edit-path']);
-                }
-              }
-            }
-          }
-        }
-
-        // Set defaults on all fields
-        $form->setDefaults($defaults);
+      // If contact details and soft credit type exist..
+      // show message and set the params as a setting for the postProcess hook
+      if ($contactDetails && $softCreditType) {
+        CRM_Core_Session::setStatus('', E::ts("This contribution will be recorded as \"{$softCreditType['label']}\" for \"{$contactDetails['display_name']}\". Thank you for giving."), 'no-popup');
+        Civi::settings()->set('sctype', $sctype);
+        Civi::settings()->set('sccid', $sccid);
       }
     }
+  }
+}
+
+/**
+ * Implements hook_civicrm_buildForm().
+ *
+ * @link https://docs.civicrm.org/dev/en/latest/hooks/hook_civicrm_buildForm/
+ */
+function honoreebyurl_civicrm_postProcess($formName, &$form) {
+  // If CRM_Contribute_Form_Contribution_Confirm and the sctype and sccid settings exist
+  if ($formName === 'CRM_Contribute_Form_Contribution_Confirm' && (Civi::settings()->get('sctype') && Civi::settings()->get('sccid'))) {
+    $sctype = Civi::settings()->get('sctype');
+    $sccid = Civi::settings()->get('sccid');
+
+    // Create ContributionSoft for the sctype and sccid with amount and contribution id
+    $results = \Civi\Api4\ContributionSoft::create()
+      ->addValue('contribution_id', $form->_contributionID)
+      ->addValue('contact_id', $sccid)
+      ->addValue('amount', $form->_amount)
+      ->addValue('soft_credit_type_id', $sctype)
+      ->execute();
+
+    // Unset the settings to avoid saving the same sctype and sccid
+    Civi::settings()->set('sctype', '');
+    Civi::settings()->set('sccid', '');
   }
 }
