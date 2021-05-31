@@ -203,7 +203,11 @@ function honoreebyurl_civicrm_buildForm($formName, &$form) {
       // If contact details and soft credit type exist..
       // show message and set the params as a setting for the postProcess hook
       if ($contactDetails && $softCreditType) {
-        CRM_Core_Session::setStatus('', E::ts("This contribution will be recorded as \"{$softCreditType['label']}\" for \"{$contactDetails['display_name']}\". Thank you for giving."), 'no-popup');
+        CRM_Core_Session::setStatus('', E::ts('This contribution will be recorded as "%1" for "%2". Thank you for giving.',
+          [
+            1 => $softCreditType['label'],
+            2 => $contactDetails['display_name'],
+          ]), 'no-popup');
         CRM_Core_Session::singleton()->set('honoreebyurl_sctype', $sctype);
         CRM_Core_Session::singleton()->set('honoreebyurl_sccid', $sccid);
         CRM_Core_Session::singleton()->set('honoreebyurl_sctype_label', $softCreditType['label']);
