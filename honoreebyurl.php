@@ -203,11 +203,8 @@ function honoreebyurl_civicrm_buildForm($formName, &$form) {
       // If contact details and soft credit type exist..
       // show message and set the params as a setting for the postProcess hook
       if ($contactDetails && $softCreditType) {
-        CRM_Core_Session::setStatus('', E::ts('This contribution will be recorded as "%1" for "%2". Thank you for giving.',
-          [
-            1 => $softCreditType['label'],
-            2 => $contactDetails['display_name'],
-          ]), 'no-popup');
+        _honoreebyurl_inject_sc_message($softCreditType['label'], $contactDetails['display_name']);
+
         CRM_Core_Session::singleton()->set('honoreebyurl_sctype', $sctype);
         CRM_Core_Session::singleton()->set('honoreebyurl_sccid', $sccid);
         CRM_Core_Session::singleton()->set('honoreebyurl_sctype_label', $softCreditType['label']);
@@ -227,8 +224,8 @@ function honoreebyurl_civicrm_postProcess($formName, &$form) {
   if ($formName === 'CRM_Contribute_Form_Contribution_Confirm' && (CRM_Core_Session::singleton()->get('honoreebyurl_sctype') && CRM_Core_Session::singleton()->get('honoreebyurl_sccid'))) {
     $sctype = CRM_Core_Session::singleton()->get('honoreebyurl_sctype');
     $sccid = CRM_Core_Session::singleton()->get('honoreebyurl_sccid');
-    $sctype_label = CRM_Core_Session::singleton()->get('honoreebyurl_sctype_label');
-    $sccid_display_name = CRM_Core_Session::singleton()->get('honoreebyurl_sccid_display_name');
+    $sctypeLabel = CRM_Core_Session::singleton()->get('honoreebyurl_sctype_label');
+    $sccidDisplayName = CRM_Core_Session::singleton()->get('honoreebyurl_sccid_display_name');
 
     // Create ContributionSoft for the sctype and sccid with amount and contribution id
     $results = \Civi\Api4\ContributionSoft::create()
@@ -238,12 +235,21 @@ function honoreebyurl_civicrm_postProcess($formName, &$form) {
       ->addValue('soft_credit_type_id', $sctype)
       ->execute();
 
-    // Show the message in the thank you page
-    CRM_Core_Session::setStatus('', E::ts("This contribution will be recorded as \"{$sctype_label}\" for \"{$sccid_display_name}\". Thank you for giving."), 'no-popup');
+    _honoreebyurl_inject_sc_message($sctypeLabel, $sccidDisplayName);
     // Unset the settings to avoid saving the same sctype and sccid
     CRM_Core_Session::singleton()->set('honoreebyurl_sctype', NULL);
     CRM_Core_Session::singleton()->set('honoreebyurl_sccid', NULL);
     CRM_Core_Session::singleton()->set('honoreebyurl_sctype_label', NULL);
     CRM_Core_Session::singleton()->set('honoreebyurl_sccid_display_name', NULL);
   }
+}
+
+function _honoreebyurl_inject_sc_message($sctypeLabel, $sccidDisplayName) {
+    // Show the message in the thank you page
+    CRM_Core_Session::setStatus('', E::ts('This contribution will be recorded as "%1" for "%2". Thank you for giving.',
+      [
+        1 => $sctypeLabel,
+        2 => $sccidDisplayName,
+      ]), 'no-popup');
+
 }
