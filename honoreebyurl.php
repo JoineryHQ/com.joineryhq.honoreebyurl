@@ -179,8 +179,8 @@ function honoreebyurl_civicrm_themes(&$themes) {
 function honoreebyurl_civicrm_buildForm($formName, &$form) {
   if ($formName === 'CRM_Contribute_Form_Contribution_Main' || $formName === 'CRM_Contribute_Form_Contribution_Confirm') {
     // Get the sctype and sccid in the URL parameter
-    $sctype = CRM_Utils_Request::retrieve('sctype', 'Integer');
-    $sccid = CRM_Utils_Request::retrieve('sccid', 'Integer');
+    $sctype = CRM_Utils_Request::retrieve('sctype', 'Integer') ?? CRM_Core_Session::singleton()->get('honoreebyurl_sctype');
+    $sccid = CRM_Utils_Request::retrieve('sccid', 'Integer') ?? CRM_Core_Session::singleton()->get('honoreebyurl_sccid');
 
     // If sctype and $sccid exist in the url param
     if ($sctype && $sccid) {
@@ -204,8 +204,10 @@ function honoreebyurl_civicrm_buildForm($formName, &$form) {
       // show message and set the params as a setting for the postProcess hook
       if ($contactDetails && $softCreditType) {
         CRM_Core_Session::setStatus('', E::ts("This contribution will be recorded as \"{$softCreditType['label']}\" for \"{$contactDetails['display_name']}\". Thank you for giving."), 'no-popup');
-        Civi::settings()->set('sctype', $sctype);
-        Civi::settings()->set('sccid', $sccid);
+        CRM_Core_Session::singleton()->set('honoreebyurl_sctype', $sctype);
+        CRM_Core_Session::singleton()->set('honoreebyurl_sccid', $sccid);
+        CRM_Core_Session::singleton()->set('honoreebyurl_sctype_label', $softCreditType['label']);
+        CRM_Core_Session::singleton()->set('honoreebyurl_sccid_display_name', $contactDetails['display_name']);
       }
     }
   }
@@ -218,9 +220,11 @@ function honoreebyurl_civicrm_buildForm($formName, &$form) {
  */
 function honoreebyurl_civicrm_postProcess($formName, &$form) {
   // If CRM_Contribute_Form_Contribution_Confirm and the sctype and sccid settings exist
-  if ($formName === 'CRM_Contribute_Form_Contribution_Confirm' && (Civi::settings()->get('sctype') && Civi::settings()->get('sccid'))) {
-    $sctype = Civi::settings()->get('sctype');
-    $sccid = Civi::settings()->get('sccid');
+  if ($formName === 'CRM_Contribute_Form_Contribution_Confirm' && (CRM_Core_Session::singleton()->get('honoreebyurl_sctype') && CRM_Core_Session::singleton()->get('honoreebyurl_sccid'))) {
+    $sctype = CRM_Core_Session::singleton()->get('honoreebyurl_sctype');
+    $sccid = CRM_Core_Session::singleton()->get('honoreebyurl_sccid');
+    $sctype_label = CRM_Core_Session::singleton()->get('honoreebyurl_sctype_label');
+    $sccid_display_name = CRM_Core_Session::singleton()->get('honoreebyurl_sccid_display_name');
 
     // Create ContributionSoft for the sctype and sccid with amount and contribution id
     $results = \Civi\Api4\ContributionSoft::create()
@@ -230,8 +234,12 @@ function honoreebyurl_civicrm_postProcess($formName, &$form) {
       ->addValue('soft_credit_type_id', $sctype)
       ->execute();
 
+    // Show the message in the thank you page
+    CRM_Core_Session::setStatus('', E::ts("This contribution will be recorded as \"{$sctype_label}\" for \"{$sccid_display_name}\". Thank you for giving."), 'no-popup');
     // Unset the settings to avoid saving the same sctype and sccid
-    Civi::settings()->set('sctype', '');
-    Civi::settings()->set('sccid', '');
+    CRM_Core_Session::singleton()->set('honoreebyurl_sctype', NULL);
+    CRM_Core_Session::singleton()->set('honoreebyurl_sccid', NULL);
+    CRM_Core_Session::singleton()->set('honoreebyurl_sctype_label', NULL);
+    CRM_Core_Session::singleton()->set('honoreebyurl_sccid_display_name', NULL);
   }
 }
