@@ -1,39 +1,17 @@
-# Honoree by URL
+# CiviCRM: Honoree by URL
 
-![Screenshot](/images/screenshot.png)
-
-(*FIXME: In one or two paragraphs, describe what the extension does and why one would download it. *)
+Allow creation of soft credits by inserting appropriate query parameters into the contribution page URL.
 
 The extension is licensed under [GPL-3.0](LICENSE.txt).
 
-## Requirements
+## Usage
+Add these two query parameters to the URL of any contribution page:
 
-* PHP v7.0+
-* CiviCRM (*FIXME: Version number*)
+* sctype: The integer value of any active Soft Credit type
+* sccid: The integer ID of any contact (contact may be of any type, but may not be trashed/deleted)
 
-## Installation (Web UI)
-
-This extension has not yet been published for installation via the web UI.
-
-## Installation (CLI, Zip)
-
-Sysadmins and developers may download the `.zip` file for this extension and
-install it with the command-line tool [cv](https://github.com/civicrm/cv).
-
-```bash
-cd <extension-dir>
-cv dl com.joineryhq.honoreebyurl@https://github.com/JoineryHQ/com.joineryhq.honoreebyurl/archive/master.zip
-```
-
-## Installation (CLI, Git)
-
-Sysadmins and developers may clone the [Git](https://en.wikipedia.org/wiki/Git) repo for this extension and
-install it with the command-line tool [cv](https://github.com/civicrm/cv).
-
-```bash
-git clone https://github.com/JoineryHQ/com.joineryhq.honoreebyurl.git
-cv en honoreebyurl
-```
+For example: https://example.org/civicrm/contribute/transact?reset=1&id=3&sctype=1&sccid=103
+  Contributions made at this URL will result in the creation of an "In Honor Of" Soft Credit for contact 103.
 
 ## Support
 ![screenshot](/images/joinery-logo.png)
