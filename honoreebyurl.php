@@ -205,6 +205,7 @@ function honoreebyurl_civicrm_postProcess($formName, &$form) {
 
     // Create ContributionSoft for the sctype and sccid with amount and contribution id
     $results = \Civi\Api4\ContributionSoft::create()
+      ->setCheckPermissions(FALSE)
       ->addValue('contribution_id', $form->_contributionID)
       ->addValue('contact_id', $sccid)
       ->addValue('amount', $form->_amount)
@@ -231,6 +232,7 @@ function _honoreebyurl_inject_sc_message($form) {
     if ($sctype && $sccid) {
       // Get soft_credit_type base on sctype
       $softCreditType = \Civi\Api4\OptionValue::get()
+        ->setCheckPermissions(FALSE)
         ->addWhere('option_group_id:name', '=', 'soft_credit_type')
         ->addWhere('value', '=', $sctype)
         ->execute()
