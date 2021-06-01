@@ -177,40 +177,18 @@ function honoreebyurl_civicrm_themes(&$themes) {
  * @link https://docs.civicrm.org/dev/en/latest/hooks/hook_civicrm_buildForm/
  */
 function honoreebyurl_civicrm_buildForm($formName, &$form) {
-  if ($formName === 'CRM_Contribute_Form_Contribution_Main' || $formName === 'CRM_Contribute_Form_Contribution_Confirm') {
-    // Get the sctype and sccid in the URL parameter
-    $sctype = CRM_Utils_Request::retrieve('sctype', 'Integer') ?? CRM_Core_Session::singleton()->get('honoreebyurl_sctype');
-    $sccid = CRM_Utils_Request::retrieve('sccid', 'Integer') ?? CRM_Core_Session::singleton()->get('honoreebyurl_sccid');
-
-    // If sctype and $sccid exist in the url param
-    if ($sctype && $sccid) {
-      // Get soft_credit_type base on sctype
-      $softCreditType = \Civi\Api4\OptionValue::get()
-        ->addWhere('option_group_id:name', '=', 'soft_credit_type')
-        ->addWhere('value', '=', $sctype)
-        ->execute()
-        ->first();
-
-      // Get contact details base on sccid
-      $contactDetails = \Civi\Api4\Contact::get()
-        ->setCheckPermissions(FALSE)
-        ->addSelect('display_name', 'first_name', 'last_name', 'prefix_id')
-        ->addWhere('id', '=', $sccid)
-        ->addWhere('is_deleted', '=', FALSE)
-        ->execute()
-        ->first();
-
-      // If contact details and soft credit type exist..
-      // show message and set the params as a setting for the postProcess hook
-      if ($contactDetails && $softCreditType) {
-        _honoreebyurl_inject_sc_message($softCreditType['label'], $contactDetails['display_name']);
-
-        CRM_Core_Session::singleton()->set('honoreebyurl_sctype', $sctype);
-        CRM_Core_Session::singleton()->set('honoreebyurl_sccid', $sccid);
-        CRM_Core_Session::singleton()->set('honoreebyurl_sctype_label', $softCreditType['label']);
-        CRM_Core_Session::singleton()->set('honoreebyurl_sccid_display_name', $contactDetails['display_name']);
-      }
-    }
+  // On first build of main form, retrieve soft-credit params from URL and store in session.
+  if ($formName === 'CRM_Contribute_Form_Contribution_Main' && !$form->_flagSubmitted){
+    CRM_Core_Session::singleton()->set('honoreebyurl_sctype', CRM_Utils_Request::retrieve('sctype', 'Integer'));
+    CRM_Core_Session::singleton()->set('honoreebyurl_sccid', CRM_Utils_Request::retrieve('sccid', 'Integer'));
+  }
+  if (
+    $formName === 'CRM_Contribute_Form_Contribution_Main'
+    || $formName === 'CRM_Contribute_Form_Contribution_Confirm'
+    || $formName === 'CRM_Contribute_Form_Contribution_ThankYou'
+  ) {
+    CRM_Core_Resources::singleton()->addVars('honoreebyurl', ['a' => 'A']);
+    _honoreebyurl_inject_sc_message($form);
   }
 }
 
@@ -224,8 +202,6 @@ function honoreebyurl_civicrm_postProcess($formName, &$form) {
   if ($formName === 'CRM_Contribute_Form_Contribution_Confirm' && (CRM_Core_Session::singleton()->get('honoreebyurl_sctype') && CRM_Core_Session::singleton()->get('honoreebyurl_sccid'))) {
     $sctype = CRM_Core_Session::singleton()->get('honoreebyurl_sctype');
     $sccid = CRM_Core_Session::singleton()->get('honoreebyurl_sccid');
-    $sctypeLabel = CRM_Core_Session::singleton()->get('honoreebyurl_sctype_label');
-    $sccidDisplayName = CRM_Core_Session::singleton()->get('honoreebyurl_sccid_display_name');
 
     // Create ContributionSoft for the sctype and sccid with amount and contribution id
     $results = \Civi\Api4\ContributionSoft::create()
@@ -234,22 +210,65 @@ function honoreebyurl_civicrm_postProcess($formName, &$form) {
       ->addValue('amount', $form->_amount)
       ->addValue('soft_credit_type_id', $sctype)
       ->execute();
-
-    _honoreebyurl_inject_sc_message($sctypeLabel, $sccidDisplayName);
-    // Unset the settings to avoid saving the same sctype and sccid
-    CRM_Core_Session::singleton()->set('honoreebyurl_sctype', NULL);
-    CRM_Core_Session::singleton()->set('honoreebyurl_sccid', NULL);
-    CRM_Core_Session::singleton()->set('honoreebyurl_sctype_label', NULL);
-    CRM_Core_Session::singleton()->set('honoreebyurl_sccid_display_name', NULL);
   }
 }
 
-function _honoreebyurl_inject_sc_message($sctypeLabel, $sccidDisplayName) {
-    // Show the message in the thank you page
-    CRM_Core_Session::setStatus('', E::ts('This contribution will be recorded as "%1" for "%2". Thank you for giving.',
-      [
-        1 => $sctypeLabel,
-        2 => $sccidDisplayName,
-      ]), 'no-popup');
+/**
+ * Inject a user-visible mesdsage regarding the soft credit.
+ *
+ * @param Object $form The civicrm form object on which we're injecting the message.
+ */
+function _honoreebyurl_inject_sc_message($form) {
+  $formKey = $form->controller->_key;
+  $messageVarName = 'honoreebyurl_sc_message_'. $formKey;
+  $scMessage = CRM_Core_Session::singleton()->get($messageVarName);
+  if (!$scMessage) {
+    // Get the sctype and sccid from session.
+    $sctype = CRM_Core_Session::singleton()->get('honoreebyurl_sctype');
+    $sccid = CRM_Core_Session::singleton()->get('honoreebyurl_sccid');
+
+    // If sctype and sccid are defined:
+    if ($sctype && $sccid) {
+      // Get soft_credit_type base on sctype
+      $softCreditType = \Civi\Api4\OptionValue::get()
+        ->addWhere('option_group_id:name', '=', 'soft_credit_type')
+        ->addWhere('value', '=', $sctype)
+        ->execute()
+        ->first();
+
+      // Get contact details base on sccid
+      $contact = \Civi\Api4\Contact::get()
+        ->setCheckPermissions(FALSE)
+        ->addSelect('display_name', 'first_name', 'last_name', 'prefix_id')
+        ->addWhere('id', '=', $sccid)
+        ->addWhere('is_deleted', '=', FALSE)
+        ->execute()
+        ->first();
+
+      // If contact details and soft credit type exist..
+      // show message and set the params as a setting for the postProcess hook
+      if ($contact && $softCreditType) {
+        $scMessage = E::ts('This contribution will be recorded as "%1" for "%2". Thank you for giving.',
+          [
+            1 => $softCreditType['label'],
+            2 => $contact['display_name'],
+          ]
+        );
+        CRM_Core_Session::singleton()->set($messageVarName, $scMessage);
+      }
+    }
+    else {
+      CRM_Core_Session::singleton()->set($messageVarName, NULL);
+    }
+  }
+
+  if ($scMessage) {
+    // Show the message on screen
+    $vars = [
+      'scMessage' => $scMessage
+    ];
+    CRM_Core_Resources::singleton()->addVars('honoreebyurl', $vars);
+    CRM_Core_Resources::singleton()->addScriptFile('com.joineryhq.honoreebyurl', 'js/injectHonoreeMessage.js');
+  }
 
 }
